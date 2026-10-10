@@ -1,5 +1,5 @@
-//ALU outside module
-module ALU_new (
+//the outside ALU module
+module ALU(
   input [3:0] a,
   input [3:0] b,
   input [3:0] opt,
@@ -8,6 +8,22 @@ module ALU_new (
   output cout
 );
   
+  //make the input selection for ain, bin and mode
+  wire [3:0] ain = (opt == 4'b1101) ? b  :   // a is b for opt 1101 b-a
+                                    a;    // keep a
+  wire [3:0] bin = (opt == 4'b1101) ? a  :   // b is a for opt 1101 b-a
+                  (opt == 4'b1110 | opt == 4'b1111) ? 1: // b is 1
+                                    b;    // keep b as is
+  wire mode = (opt == 4'b1011 | opt == 4'b1101 |opt == 4'b1111)? 1: //mode is subtraction
+                                    0; //otherwise addition
+  wire [3:0] out_carry_select;
+  wire carry_out;
+  carry_select_adder calculate(.c_in(c_in),.a(ain),.b(bin),.mode(mode),.sum(out_carry_select), .cout(carry_out));
+  
+  //assign a value to an indicator for cases where there is a carryout
+  wire use_carry_select = (opt == 4'b1010) || (opt == 4'b1011) || (opt == 4'b1101) || (opt == 4'b1110) || (opt == 4'b1111);
+  assign cout = use_carry_select ? carry_out: 1'b0;
+
   assign out = (opt == 4'b0000)? a & b:
     (opt == 4'b0001)? a | b:
     (opt == 4'b0010) ? ~ (a & b):
@@ -18,22 +34,72 @@ module ALU_new (
     (opt == 4'b0111)? ~ b:
     (opt == 4'b1000)? - a: 
     (opt == 4'b1001)? - b:
-    (opt == 4'b1010)? ~ ://output from another ALU:
-    (opt == 4'b1011)? ~ ://output from another ALU:
+    (opt == 4'b1010)? out_carry_select:  //a+b
+    (opt == 4'b1011)? out_carry_select:// a-b
     (opt == 4'b1100)? a * b:
-    (opt == 4'b1101)? ~ ://output from another ALU:
-    (opt == 4'b1110)? ~ ://output from another ALU:
-    (opt == 4'b1111)? ~ ;//output from another ALU
+    (opt == 4'b1101)? out_carry_select://b-a
+    (opt == 4'b1110)? out_carry_select://a + 1
+                      out_carry_select; //a - 1
+
     
 endmodule
 
-//ALU inside module (4 digit ALU; similar to lab1); only for addition and subtraction
+//carry_select_adder inside module; only for addition and subtraction
 
-module ALU(
+module carry_select_adder(
   input [3:0] a,
   input [3:0] b,
   input mode,
   input c_in,
-  output [3:0] out,
+  output [3:0] sum,
   output cout
 );
+  wire carry_select, cout_0, cout_1;
+  wire [1:0] sum_high_cin0, sum_high_cin1;
+  wire [3:0] bin = (mode == 1'b0) ? b  :   // ADD: b unchanged
+                                    ~b;    // SUB: b inverted
+
+  wire cin    = (mode == 1'b0) ? c_in :       // ADD: original c_in 
+                                 1'b1;       // SUB: cin is 1
+
+  ripple_carry_adder operation_low(.cin(cin),.a(a[1:0]),.b(bin[1:0]),.sum(sum[1:0]), .cout(carry_select));
+  ripple_carry_adder operation_high_cin0(.cin(1'b0),.a(a[3:2]),.b(bin[3:2]),.sum(sum_high_cin0), .cout(cout_0));
+  ripple_carry_adder operation_high_cin1(.cin(1'b1),.a(a[3:2]),.b(bin[3:2]),.sum(sum_high_cin1), .cout(cout_1));
+
+  assign cout = (carry_select == 1'b0 ) ? cout_0: //if select is 0, then select cout_0
+                                    cout_1; // otherwise , select cout_1
+  assign sum[3:2] = (carry_select == 1'b0 ) ? sum_high_cin0: //if select is 0, then select sum_high_cin0
+                                    sum_high_cin1; // otherwise , select sum_high_cin1
+endmodule
+
+
+//2-bit Ripple adder
+module ripple_carry_adder(
+  input cin,
+  input [1:0] a,
+  input [1:0] b,
+  output [1:0] sum,
+  output cout);
+
+  wire c1;
+  full_adder add0(.cin(cin),.a(a[0]),.b(b[0]),.sum(sum[0]),.cout(c1));
+  full_adder add1(.cin(c1),.a(a[1]),.b(b[1]),.sum(sum[1]),.cout(cout));
+endmodule
+
+
+//Full adder
+module full_adder(
+  input cin,
+  input a,
+  input b,
+  output sum,
+  output cout);
+
+  wire w1, w2, w3;
+  assign w1	= a ^ b;
+  assign w2	= a & b;
+  assign w3 = cin & w1;
+  assign sum = cin ^ w1;
+  assign cout = w2 | w3;
+
+endmodule
