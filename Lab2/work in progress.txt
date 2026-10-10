@@ -1,3 +1,4 @@
+//ALU outside module
 module ALU_new (
   input [3:0] a,
   input [3:0] b,
@@ -5,10 +6,7 @@ module ALU_new (
   input c_in,
   output [3:0] out,
   output cout
-  
 );
-  
-  
   
   assign out = (opt == 4'b0000)? a & b:
     (opt == 4'b0001)? a | b:
@@ -27,5 +25,15 @@ module ALU_new (
     (opt == 4'b1110)? ~ ://output from another ALU:
     (opt == 4'b1111)? ~ ;//output from another ALU
     
-    
 endmodule
+
+//ALU inside module (4 digit ALU; similar to lab1); only for addition and subtraction
+
+module ALU(
+  input [3:0] a,
+  input [3:0] b,
+  input mode,
+  input c_in,
+  output [3:0] out,
+  output cout
+);
