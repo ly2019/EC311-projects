@@ -1,4 +1,114 @@
-//the outside ALU module
+//a top module to connect everything
+module top(
+    input        clk,      
+    input [12:0] sw,         // switches 12..0
+    output       led,        // LED for carry-out
+    output [6:0] seg,         // segment pins {g,f,e,d,c,b,a}
+    output [3:0] an,          // digit-enable pins
+    output       dp           // decimal point
+);
+  
+    // 1. Split the switches into three 4-bit numbers and carryin
+    wire [3:0] opt = sw[12:9];   // leftmost 4 switches
+    wire [3:0] a   = sw[8:5];
+    wire [3:0] b   = sw[4:1];    
+    wire       c_in = sw[0];     // rightmost is cin
+
+
+    // 2. Wires to carry the ALU's results
+    wire [3:0] out;
+    wire       cout;
+
+    // 3. The ALU
+    ALU alu(.a(a), .b(b), .opt(opt), .c_in(c_in),.out(out), .cout(cout));
+
+    // 4. The display: opcode, a, b, out (left to right)
+    display disp(.clk(clk),.d3(opt), .d2(a), .d1(b), .d0(out),.an(an), .seg(seg));
+
+    //5. led output
+    assign led = cout;   // carry-out on LED X
+
+    //6. turn decimal off
+    assign dp = 1'b1;   // 1 = off because we don't need the decimal point
+
+endmodule
+
+
+//The display module
+module display(
+    input        clk,              
+    input  [3:0] d3, d2, d1, d0,   // four 4-bit number
+    output reg [3:0] an,           // which digit is on (active-low)
+    output [6:0] seg               // segment pattern {g,f,e,d,c,b,a} (active-low)
+);
+
+    // set a counter
+    reg [19:0] counter = 0;
+    always @(posedge clk)
+        counter <= counter + 1;
+
+    // use the top 2 bits of counter to pick one digit out of four to display
+    reg [3:0] number;                 // which number to show on the display (4 digit lights)
+    always @(*) begin
+        case (counter[19:18])
+            2'd0: begin number = d0; an = 4'b1110; end   // rightmost digit
+            2'd1: begin number = d1; an = 4'b1101; end
+            2'd2: begin number = d2; an = 4'b1011; end
+            default: begin number = d3; an = 4'b0111; end // leftmost digit
+        endcase
+    end
+
+    // use decoder turn the chosen number into a segment pattern
+    decoder dec(.hex(number), .seg(seg));
+
+endmodule
+
+
+//The decoder module, this module is to convert the input, a 4-bit value (0-F), into a 7-segment display pattern
+// Segments are active-low (0 = on).
+//      a
+//     ---
+//  f |   | b
+//     -g-
+//  e |   | c
+//     ---
+//      d
+//
+// seg[6:0] = {g, f, e, d, c, b, a}
+module decoder(
+  input [3:0] hex,
+  output reg [6:0] seg
+);
+  always @(*) begin
+    case (hex)
+      4'h0: seg = 7'b1000000;   // 0
+      4'h1: seg = 7'b1111001;   // 1
+      4'h2: seg = 7'b0100100;   // 2
+      4'h3: seg = 7'b0110000;   // 3
+      4'h4: seg = 7'b0011001;   // 4
+      4'h5: seg = 7'b0010010;   // 5
+      4'h6: seg = 7'b0000010;   // 6
+      4'h7: seg = 7'b1111000;   // 7
+      4'h8: seg = 7'b0000000;   // 8
+      4'h9: seg = 7'b0010000;   // 9
+      4'hA: seg = 7'b0001000;   // A
+      4'hB: seg = 7'b0000011;   // b
+      4'hC: seg = 7'b1000110;   // C
+      4'hD: seg = 7'b0100001;   // d
+      4'hE: seg = 7'b0000110;   // E
+      4'hF: seg = 7'b0001110;   // F
+      default: seg = 7'b1111111; // all segments off
+    endcase
+  end
+endmodule
+
+
+
+
+
+
+
+//the ALU module
 module ALU(
   input [3:0] a,
   input [3:0] b,
