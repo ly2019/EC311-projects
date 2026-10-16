@@ -1,0 +1,224 @@
+//a top module to connect everything
+module top(
+    input        clk,      
+    input [12:0] sw,         // switches 12..0
+    output       led,        // LED for carry-out
+    output [6:0] seg,         // segment pins {g,f,e,d,c,b,a}
+    output [3:0] an,          // digit-enable pins
+    output       dp           // decimal point
+);
+  
+    // 1. Split the switches into three 4-bit numbers and carryin
+    wire [3:0] opt = sw[12:9];   // leftmost 4 switches
+    wire [3:0] a   = sw[8:5];
+    wire [3:0] b   = sw[4:1];    
+    wire       c_in = sw[0];     // rightmost is cin
+
+
+    // 2. Wires to carry the ALU's results
+    wire [3:0] out;
+    wire       cout;
+
+    // 3. The ALU
+    ALU alu(.a(a), .b(b), .opt(opt), .c_in(c_in),.out(out), .cout(cout));
+
+    // 4. The display: opcode, a, b, out (left to right)
+    display disp(.clk(clk),.d3(opt), .d2(a), .d1(b), .d0(out),.an(an), .seg(seg));
+
+    //5. led output
+    assign led = cout;   // carry-out on LED X
+
+    //6. turn decimal off
+    assign dp = 1'b1;   // 1 = off because we don't need the decimal point
+
+endmodule
+
+
+//The display module
+module display(
+    input        clk,              
+    input  [3:0] d3, d2, d1, d0,   // four 4-bit number
+    output reg [3:0] an,           // which digit is on (active-low)
+    output [6:0] seg               // segment pattern {g,f,e,d,c,b,a} (active-low)
+);
+
+    // set a counter
+    reg [19:0] counter = 0;
+    always @(posedge clk)
+        counter <= counter + 1;
+
+    // use the top 2 bits of counter to pick one digit out of four to display
+    reg [3:0] number;                 // which number to show on the display (4 digit lights)
+    always @(*) begin
+        case (counter[19:18])
+            2'd0: begin number = d0; an = 4'b1110; end   // rightmost digit
+            2'd1: begin number = d1; an = 4'b1101; end
+            2'd2: begin number = d2; an = 4'b1011; end
+            default: begin number = d3; an = 4'b0111; end // leftmost digit
+        endcase
+    end
+
+    // use decoder turn the chosen number into a segment pattern
+    decoder dec(.hex(number), .seg(seg));
+
+endmodule
+
+
+//The decoder module, this module is to convert the input, a 4-bit value (0-F), into a 7-segment display pattern
+// Segments are active-low (0 = on).
+//      a
+//     ---
+//  f |   | b
+//     -g-
+//  e |   | c
+//     ---
+//      d
+//
+// seg[6:0] = {g, f, e, d, c, b, a}
+module decoder(
+  input [3:0] hex,
+  output reg [6:0] seg
+);
+  always @(*) begin
+    case (hex)
+      4'h0: seg = 7'b1000000;   // 0
+      4'h1: seg = 7'b1111001;   // 1
+      4'h2: seg = 7'b0100100;   // 2
+      4'h3: seg = 7'b0110000;   // 3
+      4'h4: seg = 7'b0011001;   // 4
+      4'h5: seg = 7'b0010010;   // 5
+      4'h6: seg = 7'b0000010;   // 6
+      4'h7: seg = 7'b1111000;   // 7
+      4'h8: seg = 7'b0000000;   // 8
+      4'h9: seg = 7'b0010000;   // 9
+      4'hA: seg = 7'b0001000;   // A
+      4'hB: seg = 7'b0000011;   // b
+      4'hC: seg = 7'b1000110;   // C
+      4'hD: seg = 7'b0100001;   // d
+      4'hE: seg = 7'b0000110;   // E
+      4'hF: seg = 7'b0001110;   // F
+      default: seg = 7'b1111111; // all segments off
+    endcase
+  end
+endmodule
+
+
+
+
+
+
+
+//the ALU module
+module ALU(
+  input [3:0] a,
+  input [3:0] b,
+  input [3:0] opt,
+  input c_in,
+  output [3:0] out,
+  output cout
+);
+  
+  //make the input selection for ain, bin and mode
+  wire [3:0] ain = (opt == 4'b1101) ? b  :   // a is b for opt 1101 b-a
+                                    a;    // keep a
+  wire [3:0] bin = (opt == 4'b1101) ? a  :   // b is a for opt 1101 b-a
+                  (opt == 4'b1110 | opt == 4'b1111) ? 1: // b is 1
+                                    b;    // keep b as is
+  wire mode = (opt == 4'b1011 | opt == 4'b1101 |opt == 4'b1111)? 1: //mode is subtraction
+                                    0; //otherwise addition
+  wire [3:0] out_carry_select;
+  wire carry_out;
+
+  // If set to 1110, have addition work by locking c_in to 0
+  wire adder_cin = (opt == 4'b1110) ? 1'b0 : c_in;
+
+  carry_select_adder calculate(
+    .c_in(adder_cin),
+    .a(ain),
+    .b(bin),
+    .mode(mode),
+    .sum(out_carry_select),
+    .cout(carry_out));
+  
+  //assign a value to an indicator for cases where there is a carryout
+  wire use_carry_select = (opt == 4'b1010) || (opt == 4'b1011) || (opt == 4'b1101) || (opt == 4'b1110) || (opt == 4'b1111);
+  assign cout = use_carry_select ? carry_out: 1'b0;
+
+  assign out = (opt == 4'b0000)? a & b:
+    (opt == 4'b0001)? a | b:
+    (opt == 4'b0010) ? ~ (a & b):
+    (opt == 4'b0011)? ~ (a | b):
+    (opt == 4'b0100)? (a ^ b):
+    (opt == 4'b0101)? ~ (a ^ b):
+    (opt == 4'b0110)? ~ a:
+    (opt == 4'b0111)? ~ b:
+    (opt == 4'b1000)? - a: 
+    (opt == 4'b1001)? - b:
+    (opt == 4'b1010)? out_carry_select:  //a+b
+    (opt == 4'b1011)? out_carry_select:// a-b
+    (opt == 4'b1100)? a * b:
+    (opt == 4'b1101)? out_carry_select://b-a
+    (opt == 4'b1110)? out_carry_select://a + 1
+                      out_carry_select; //a - 1
+
+    
+endmodule
+
+//carry_select_adder inside module; only for addition and subtraction
+
+module carry_select_adder(
+  input [3:0] a,
+  input [3:0] b,
+  input mode,
+  input c_in,
+  output [3:0] sum,
+  output cout
+);
+  wire carry_select, cout_0, cout_1;
+  wire [1:0] sum_high_cin0, sum_high_cin1;
+  wire [3:0] bin = (mode == 1'b0) ? b  :   // ADD: b unchanged
+                                    ~b;    // SUB: b inverted
+
+  wire cin    = (mode == 1'b0) ? c_in :       // ADD: original c_in 
+                                 1'b1;       // SUB: cin is 1
+
+  ripple_carry_adder operation_low(.cin(cin),.a(a[1:0]),.b(bin[1:0]),.sum(sum[1:0]), .cout(carry_select));
+  ripple_carry_adder operation_high_cin0(.cin(1'b0),.a(a[3:2]),.b(bin[3:2]),.sum(sum_high_cin0), .cout(cout_0));
+  ripple_carry_adder operation_high_cin1(.cin(1'b1),.a(a[3:2]),.b(bin[3:2]),.sum(sum_high_cin1), .cout(cout_1));
+
+  assign cout = (carry_select == 1'b0 ) ? cout_0: //if select is 0, then select cout_0
+                                    cout_1; // otherwise , select cout_1
+  assign sum[3:2] = (carry_select == 1'b0 ) ? sum_high_cin0: //if select is 0, then select sum_high_cin0
+                                    sum_high_cin1; // otherwise , select sum_high_cin1
+endmodule
+
+
+//2-bit Ripple adder
+module ripple_carry_adder(
+  input cin,
+  input [1:0] a,
+  input [1:0] b,
+  output [1:0] sum,
+  output cout);
+
+  wire c1;
+  full_adder add0(.cin(cin),.a(a[0]),.b(b[0]),.sum(sum[0]),.cout(c1));
+  full_adder add1(.cin(c1),.a(a[1]),.b(b[1]),.sum(sum[1]),.cout(cout));
+endmodule
+
+
+//Full adder
+module full_adder(
+  input cin,
+  input a,
+  input b,
+  output sum,
+  output cout);
+
+  wire w1, w2, w3;
+  assign w1	= a ^ b;
+  assign w2	= a & b;
+  assign w3 = cin & w1;
+  assign sum = cin ^ w1;
+  assign cout = w2 | w3;
+endmodule
