@@ -47,7 +47,7 @@ endmodule
 //The display module
 module display(
     input        clk,              
-  	input  [4:0] d7, d6, d5, d4, d3, d2, d1, d0,   //  8 4-bit number
+	input  [3:0] d7, d6, d5, d4, d3, d2, d1, d0,   //  8 4-bit number
   	output reg [7:0] an,           // which digit is on (active-low)
  	output [6:0] seg,               // segment pattern {g,f,e,d,c,b,a} (active-low)
   	output reg dp
