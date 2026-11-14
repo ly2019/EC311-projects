@@ -38,6 +38,12 @@ module clock_tb();
 			@(posedge clk); #1 tick = 1;  // wait a tiny delay after the edge
       end
       $display("%d, %d, %d, %d, %d (expect 0,7,0,0,0 )", hour1, hour0, minute1, minute0, uut.second); 
+      
+      //5. check time after 61200 seconds (17 hours)
+      repeat (61200) begin
+			@(posedge clk); #1 tick = 1;  // wait a tiny delay after the edge
+      end
+      $display("%d, %d, %d, %d, %d (expect 0,0,0,0,0 )", hour1, hour0, minute1, minute0, uut.second); 
 
     $finish;
     
