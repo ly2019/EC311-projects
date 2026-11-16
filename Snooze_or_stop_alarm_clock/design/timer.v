@@ -29,8 +29,8 @@ module timer(
   	output [3:0] m1, m0, s1, s0 //the digits of the left minutes and seconds
 );
 	//set the countdown through a lookup
-  	wire [9:0] snooze_time	=	(snooze_cnt == 2'b01)? 'd10: //300s if it is the first snooze
-    							(snooze_cnt == 2'b10)? 'd5: //180s if it is the second snooze
+	wire [9:0] snooze_time	=	(snooze_cnt == 2'b01)? 'd300: //300s if it is the first snooze 
+	(snooze_cnt == 2'b10)? 'd180: //180s if it is the second snooze
      				 									'd0;
   	reg [9:0] time_remain = 0;
   
