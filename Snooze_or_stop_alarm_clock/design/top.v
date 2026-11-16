@@ -25,7 +25,7 @@
 module top(
     input  wire        clk,      
   	input  wire [3:0]  button,         // button 3:0
-    output wire      led,        // LED for carry-out
+    output wire      led,               // LED for buzz
     output wire [6:0] seg,         // segment pins {g,f,e,d,c,b,a}
   	output wire [7:0] an,          // digit-enable pins
     output wire     dp           // decimal point
